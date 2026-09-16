@@ -67,6 +67,10 @@ export const saveNewUser = async function (userData: SaveUserData, sendPassword:
 
 	await Users.updateFromUpdater({ _id }, updater);
 
+	if (userData.presenceDisabledByAdmin) {
+		void StatusVisibility.invalidate([_id], { allViewers: true });
+	}
+
 	if (userData.sendWelcomeEmail) {
 		await sendWelcomeEmail(userData);
 	}
@@ -76,10 +80,6 @@ export const saveNewUser = async function (userData: SaveUserData, sendPassword:
 	}
 
 	userData._id = _id;
-
-	if (userData.presenceDisabledByAdmin) {
-		void StatusVisibility.invalidate([_id], { allViewers: true });
-	}
 
 	// Offline (air-gapped) licenses suppress the default Gravatar fetch — a
 	// default-on outbound call the workspace must never initiate on its own.
