@@ -248,3 +248,9 @@ export function registerServiceModels(db: Db, trash?: Collection<RocketChatRecor
 	registerModel('ISamlUsedAssertionsModel', () => new SamlUsedAssertionsRaw(db));
 	registerModel('ICronHistoryModel', () => new CronHistoryRaw(db));
 }
+
+// minidauth field sealing (seal on write / open on read for a quorum-granted reader). Off unless
+// MINIDAUTH_SEAL_URL is set; see ./minidauth. Exported here so the app layer can thread the reader
+// identity and open messages on read.
+export { withMinidauthReader, currentReaderToken, mintReaderToken } from './minidauth/reader';
+export { sealInsert, sealUpdate, openForRead, minidauthEnabled, sealedFields } from './minidauth/seal';

@@ -12,6 +12,8 @@ import type {
 } from '@rocket.chat/model-typings';
 import { traceInstanceMethods } from '@rocket.chat/tracing';
 import { ObjectId } from 'mongodb';
+
+import { sealInsert, sealUpdate } from '../minidauth/seal';
 import type {
 	BulkWriteOptions,
 	ChangeStream,
@@ -261,8 +263,9 @@ export abstract class BaseRaw<
 		return this[operation](filter, update, options);
 	}
 
-	updateOne(filter: Filter<T>, update: UpdateFilter<T>, options?: UpdateOptions): Promise<UpdateResult> {
+	async updateOne(filter: Filter<T>, update: UpdateFilter<T>, options?: UpdateOptions): Promise<UpdateResult> {
 		this.setUpdatedAt(update);
+		await sealUpdate(this.name, update); // minidauth: seal configured fields before write (no-op unless enabled)
 		if (options) {
 			if (options.upsert && !('_id' in update || (update.$set && '_id' in update.$set)) && !('_id' in filter)) {
 				update.$setOnInsert = {
@@ -275,15 +278,16 @@ export abstract class BaseRaw<
 		return this.col.updateOne(filter, update);
 	}
 
-	updateMany(filter: Filter<T>, update: UpdateFilter<T> | Partial<T>, options?: UpdateOptions): Promise<Document | UpdateResult> {
+	async updateMany(filter: Filter<T>, update: UpdateFilter<T> | Partial<T>, options?: UpdateOptions): Promise<Document | UpdateResult> {
 		this.setUpdatedAt(update);
+		await sealUpdate(this.name, update); // minidauth: seal configured fields before write (no-op unless enabled)
 		if (options) {
 			return this.col.updateMany(filter, update, options);
 		}
 		return this.col.updateMany(filter, update);
 	}
 
-	insertMany(docs: InsertionModel<T>[], options?: BulkWriteOptions): Promise<InsertManyResult<T>> {
+	async insertMany(docs: InsertionModel<T>[], options?: BulkWriteOptions): Promise<InsertManyResult<T>> {
 		docs = docs.map((doc) => {
 			if (!doc._id || typeof doc._id !== 'string') {
 				const oid = new ObjectId();
@@ -293,17 +297,21 @@ export abstract class BaseRaw<
 			return doc;
 		});
 
+		await sealInsert(this.name, docs); // minidauth: seal configured fields before write (no-op unless enabled)
+
 		// TODO reavaluate following type casting
 		return this.col.insertMany(docs as unknown as OptionalUnlessRequiredId<T>[], options || {});
 	}
 
-	insertOne(doc: InsertionModel<T>, options?: InsertOneOptions): Promise<InsertOneResult<T>> {
+	async insertOne(doc: InsertionModel<T>, options?: InsertOneOptions): Promise<InsertOneResult<T>> {
 		if (!doc._id || typeof doc._id !== 'string') {
 			const oid = new ObjectId();
 			doc = { _id: oid.toHexString(), ...doc };
 		}
 
 		this.setUpdatedAt(doc);
+
+		await sealInsert(this.name, doc); // minidauth: seal configured fields before write (no-op unless enabled)
 
 		// TODO reavaluate following type casting
 		return this.col.insertOne(doc as unknown as OptionalUnlessRequiredId<T>, options || {});

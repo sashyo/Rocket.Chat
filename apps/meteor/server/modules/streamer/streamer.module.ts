@@ -265,6 +265,23 @@ export abstract class Streamer<N extends keyof StreamerEvents> extends EventEmit
 
 	abstract changedPayload(collection: string, id: string, fields: Record<string, any>): string | false;
 
+	// minidauth: the distinct userIds of clients currently subscribed to an event (e.g. a room id), so a
+	// per-recipient transform can pre-open sealed fields for exactly the connected recipients.
+	getSubscribedUserIds(eventName: string): string[] {
+		const subscriptions = this.subscriptionsByEventName.get(eventName);
+		if (!subscriptions) {
+			return [];
+		}
+		const ids = new Set<string>();
+		for (const sub of subscriptions) {
+			const uid = sub.subscription?._session?.userId ?? sub.userId ?? undefined;
+			if (uid) {
+				ids.add(uid);
+			}
+		}
+		return [...ids];
+	}
+
 	_emit(eventName: string, args: any[], origin: Connection | undefined, broadcast: boolean, transform?: TransformMessage): boolean {
 		if (broadcast === true) {
 			StreamerCentral.emit('broadcast', this.name, eventName, args);
