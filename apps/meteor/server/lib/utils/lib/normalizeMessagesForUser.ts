@@ -1,5 +1,5 @@
 import type { IMessage } from '@rocket.chat/core-typings';
-import { Users } from '@rocket.chat/models';
+import { Users, minidauthEnabled, openForRead, withMinidauthReader } from '@rocket.chat/models';
 
 import { settings } from '../../../settings';
 
@@ -23,6 +23,12 @@ function getNameOfUsername(users: Map<string, string>, username: string): string
 }
 
 export const normalizeMessagesForUser = async <T extends NormalizableMessage = IMessage>(messages: T[], uid?: string): Promise<T[]> => {
+	// minidauth: open sealed message fields as the requesting user, gated by minidauth's quorum grant.
+	// Only engage when sealing is configured; a user without the reading role leaves the field ciphertext.
+	if (minidauthEnabled()) {
+		await withMinidauthReader(uid, () => openForRead('message', messages));
+	}
+
 	// if not using real names, there is nothing else to do
 	if (!settings.get('UI_Use_Real_Name')) {
 		return messages.map((message) => filterStarred(message, uid));

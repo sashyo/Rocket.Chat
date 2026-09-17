@@ -7,6 +7,7 @@ import type { IUser, IRoom, IRole, VideoConference, ISetting, IOmnichannelRoom, 
 import { Logger } from '@rocket.chat/logger';
 import type { ServerMediaSignal } from '@rocket.chat/media-signaling';
 import { parse } from '@rocket.chat/message-parser';
+import { minidauthEnabled, openForRead, withMinidauthReader } from '@rocket.chat/models';
 
 import { refreshVisibility } from '../../lib/notifications/core/lib/Presence';
 import { statusVisibilityGate } from '../../lib/statusVisibility/StatusVisibilityGate';
@@ -246,14 +247,52 @@ export class ListenersModule {
 				return;
 			}
 
-			notifications.streamRoomMessage._emit('__my_messages__', [message], undefined, false, (streamer, _sub, eventName, args, allowed) =>
+			// minidauth: when sealing is off, this is the untouched upstream fan-out (one shared payload).
+			if (!minidauthEnabled()) {
+				notifications.streamRoomMessage._emit('__my_messages__', [message], undefined, false, (streamer, _sub, eventName, args, allowed) =>
+					streamer.changedPayload(streamer.subscriptionName, 'id', {
+						eventName,
+						args: [...args, allowed],
+					}),
+				);
+
+				notifications.streamRoomMessage.emitWithoutBroadcast(message.rid, message);
+				return;
+			}
+
+			// minidauth: the broadcast object carries the sealed `msg`. Pre-open it once per connected
+			// recipient (gated by each user's quorum grant), then hand each socket the copy opened for that
+			// user. Ungranted or unknown recipients keep the sealed message, so a snooper sees ciphertext live.
+			const openedByUser = new Map<string, typeof message>();
+			const uids = new Set<string>([
+				...notifications.streamRoomMessage.getSubscribedUserIds(message.rid),
+				...notifications.streamRoomMessage.getSubscribedUserIds('__my_messages__'),
+			]);
+			await Promise.all(
+				[...uids].map(async (uid) => {
+					const copy = structuredClone(message);
+					await withMinidauthReader(uid, () => openForRead('message', [copy]));
+					openedByUser.set(uid, copy);
+				}),
+			);
+			const messageFor = (sub: any): typeof message => {
+				const uid = sub?.subscription?._session?.userId ?? sub?.userId;
+				return (uid && openedByUser.get(uid)) || message;
+			};
+
+			notifications.streamRoomMessage._emit('__my_messages__', [message], undefined, false, (streamer, sub, eventName, args, allowed) =>
 				streamer.changedPayload(streamer.subscriptionName, 'id', {
 					eventName,
-					args: [...args, allowed],
+					args: [messageFor(sub), ...args.slice(1), allowed],
 				}),
 			);
 
-			notifications.streamRoomMessage.emitWithoutBroadcast(message.rid, message);
+			notifications.streamRoomMessage._emit(message.rid, [message], undefined, false, (streamer, sub, eventName) =>
+				streamer.changedPayload(streamer.subscriptionName, 'id', {
+					eventName,
+					args: [messageFor(sub)],
+				}),
+			);
 		});
 
 		service.onEvent('notify.messagesRead', ({ rid, until, tmid }): void => {
