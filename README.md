@@ -1,5 +1,24 @@
+<!-- minidauth:start -->
+> ## 🔒 This build is minidauth'd
+>
+> **Rocket.Chat, with a key nobody holds.** What people say, the text of every message is sealed before it ever reaches the database, encrypted with a key that is never assembled anywhere, not even to decrypt. The key lives as threshold shares across the [Tide](https://tide.org) network, so the classic breach, someone walking off with your database or a backup, turns up nothing readable.
+>
+> - **Your database holds only ciphertext.** A stolen dump or a leaked backup is useless to whoever takes it.
+> - **There is no standing key to steal.** The vendor key is never whole, not in this app and not on any single server.
+> - **Reads are governed, not assumed.** A quorum grants the reading role. Revoke it and reads stop everywhere, at once.
+> - **Nobody juggles keys.** People keep the login they already have. The gate is a role, not a keyfile they can lose.
+> - **Nothing else changes.** Rocket.Chat works exactly as it does upstream, and sealing stays off until you turn it on.
+>
+> See how it works → **[minidauth](https://github.com/sashyo/minidauth)** · **[dauth.me](https://www.dauth.me)**
+<!-- minidauth:end -->
+
 <p align="center"> 
   <img  src="https://github.com/RocketChat/Rocket.Chat.Artwork/raw/master/Logos/2020/png/logo-horizontal-red.png" data-canonical-src="https://github.com/RocketChat/Rocket.Chat.Artwork/raw/master/Logos/2020/png/logo-horizontal-red.png" width="400" />
+</p>
+
+<!-- minidauth-badge -->
+<p align="center">
+  <a href="https://github.com/sashyo/minidauth"><img alt="minidauth'd" src="https://img.shields.io/badge/minidauth%27d-sealed_at_rest-2ea44f?style=for-the-badge&logo=lock&logoColor=white"></a>
 </p>
 
 <h1 align="center">
