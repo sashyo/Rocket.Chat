@@ -23,6 +23,14 @@ const SEALED: Record<string, string[]> = {
 	message: ['msg'],
 };
 
+// Derived plaintext copies to remove on write, keyed by MODEL name. Rocket.Chat pre-parses a message
+// into `md` (a markdown AST that still holds the plaintext) and the client renders `md` when present,
+// so sealing `msg` alone would leak the text through `md`. Dropping it makes the client re-parse the
+// sealed-or-opened `msg` instead. Applied wherever the model has sealed fields.
+const DROP_ON_WRITE: Record<string, string[]> = {
+	message: ['md'],
+};
+
 const MARKER = 'ms1:'; // a sealed string value is "ms1:<ciphertextB64>"
 const isSealed = (v: unknown): v is string => typeof v === 'string' && v.startsWith(MARKER);
 
@@ -103,6 +111,17 @@ const collectPlaintextLeaves = (collection: string, carrier: any, out: Leaf[]): 
 	}
 };
 
+const dropDerived = (collection: string, carrier: any): void => {
+	if (!carrier || typeof carrier !== 'object') {
+		return;
+	}
+	for (const f of DROP_ON_WRITE[collection] || []) {
+		if (f in carrier) {
+			delete carrier[f];
+		}
+	}
+};
+
 /** Seal the configured fields on documents about to be inserted. Mutates in place. */
 export async function sealInsert(collection: string, docs: any | any[]): Promise<void> {
 	if (!minidauthEnabled() || sealedFields(collection).length === 0) {
@@ -111,6 +130,7 @@ export async function sealInsert(collection: string, docs: any | any[]): Promise
 	const out: Leaf[] = [];
 	for (const doc of Array.isArray(docs) ? docs : [docs]) {
 		collectPlaintextLeaves(collection, doc, out);
+		dropDerived(collection, doc);
 	}
 	await sealLeaves(out);
 }
@@ -124,6 +144,9 @@ export async function sealUpdate(collection: string, update: any): Promise<void>
 	collectPlaintextLeaves(collection, update.$set, out);
 	collectPlaintextLeaves(collection, update, out); // a direct-field replacement style update
 	await sealLeaves(out);
+	// remove derived plaintext copies from whichever shape the update uses
+	dropDerived(collection, update.$set);
+	dropDerived(collection, update);
 }
 
 /** Open the configured sealed fields on documents just read from Mongo. Mutates in place. */
